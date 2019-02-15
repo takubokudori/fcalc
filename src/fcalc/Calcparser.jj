@@ -1,0 +1,178 @@
+/**
+ * JavaCC template file created by SF JavaCC plugin 1.5.28+ wizard for JavaCC 1.5.0+
+ */
+
+options
+{
+  static = false;
+}
+
+PARSER_BEGIN(Calcparser)
+package fcalc;
+import java.io.*;
+import java.util.*;
+class Calcparser {}
+PARSER_END(Calcparser)
+
+TOKEN: {
+  < NUM:((["0"-"9"])+ | (["0"-"9"])+ "."(["0"-"9"])+ ) >
+| < PLUSOP: "+">
+| < MINUSOP: "-" >
+| < MULTIOP:"*" >
+| < POWEROP:"^" >
+| < DIVIDEOP:"/" >
+| < OPEN:"(" >
+| < CLOSE:")" >
+| < EQUALOP:"=" >
+| < VAR:["a"-"z","A"-"Z"] >
+| < GLOBALV:"$" < VAR > >
+| < FUNCV:"@" < VAR > >
+| < COMMA:"," >
+| < LF:"\n" >
+}
+
+SKIP :
+{
+  " "
+| "\r"
+| "\t"
+}
+
+public Node start():
+{
+	Node root=null,node;
+}
+{
+   (root=xexpr())? (< EOF >|< LF >) { return root; }
+}
+
+public Node xexpr():
+{
+  Node root=null,node=null;
+}
+{
+	root=expr()
+	( <EQUALOP> node=expr(){
+		root=Op.connectToLeft(root);
+		root.setOp('=');
+		root.addRight(node);
+	}
+	)? {return root;}
+}
+
+// calcの戻り値は最終的にpoly型になるようにする．
+public Node expr():
+{
+	Node root,node;
+}
+{
+	root=prod()
+	( <PLUSOP> node=prod(){
+		root=Op.connectToLeft(root);
+		root.setOp('+');
+		root.addRight(node);
+	}
+|  <MINUSOP> node=prod(){
+		root=Op.connectToLeft(root);
+		root.setOp('-');
+		root.addRight(node);
+	}
+	)* { return root;}
+}
+
+private Node prod() :
+{
+	Node node, root;
+}
+{
+	root=pow()
+	( <MULTIOP> node=pow() {
+					root = Op.connectToLeft(root);
+					root.setOp('*');
+					root.addRight(node);
+	}
+	|  <DIVIDEOP> node=pow() {
+						root = Op.connectToLeft(root);
+				root.setOp('/');
+				root.addRight(node);
+	}
+	)* { return root; }
+}
+
+private Node pow():
+{
+  Node root,node;
+}
+{
+   root=param()
+  (
+    < POWEROP > node=param() {
+                root = Op.connectToLeft(root);
+		root.setOp('^');
+		root.addRight(node);
+	}
+	)* { return root; }
+}
+
+private Node param() :
+{
+  Node node;
+  boolean minusf=false;
+}
+{
+  ( < MINUSOP > { minusf=!minusf; }|< PLUSOP >)*
+   (
+     node=func() {if(minusf) node.setMinus(minusf);return node; }
+| node=var() {if(minusf) node.setMinus(minusf); return node; }
+| node=num() {if(minusf) node.setMinus(minusf); return node; }
+	| <OPEN> node=expr() <CLOSE> {if(minusf) node.setMinus(minusf); return node;}
+)
+}
+
+// 単純な数値型
+private Node num() :
+{
+  Node root=null;
+  Token token;
+}
+{
+  token=<NUM> { double temp= Double.parseDouble(token.image);return new Poly(temp);}
+| root=gvar() { return root; }
+}
+
+private Node var():
+{
+  Node coe;
+  char vname;
+}
+{
+  token=< VAR > { return new Poly(token.image.charAt(0));}
+}
+
+private Node gvar():
+{
+  Token token;
+  char gvar_name;
+}
+{
+  token=< GLOBALV > { return new Gvar(token.image.charAt(1)); }
+}
+
+private Node func():
+{
+	Token token;
+	char func_name;
+	Node node;
+	LinkedList<Node> args_list=new LinkedList<Node>();
+}
+{
+	token=< FUNCV > { func_name=token.image.charAt(1);}
+	< OPEN >
+	node=expr() { args_list.add(node);}
+	(
+	  < COMMA >
+	  node = expr() { args_list.add(node); }
+	)*
+	< CLOSE >
+	 { return new Func(func_name,args_list);}
+}
